@@ -1,0 +1,338 @@
+---
+title: "Data SNIS"
+author: "Beatriz Couto Ribeiro"
+date: "2025-01-09"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#Limpar o ambiente 
+```{r}
+
+rm(list=ls(all=T))
+
+```
+
+# 1. Download Data
+## 1.1. Set Folder
+```{r}
+
+directory <- "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/water_charges_pi"
+
+```
+
+## 1.2. Download Packages
+```{r setup, include=FALSE}
+suppressMessages(memory.limit(size = NA))
+
+if(!require(install.load)){
+  install.packages("install.load")
+  library(install.load)
+}
+suppressMessages(install_load("tidyverse", "dplyr", "ggplot2", "readr", "readxl","knitr","here", "data.table","basedosdados","bigrquery", "dbplyr","janitor","fuzzyjoin","zoo", "purrr", "stringr","DBI", "openxlsx"))
+
+`%notin%` <- Negate(`%in%`)
+
+```
+
+## 1.3. set the google cloud console ID and project
+```{r}
+
+set_billing_id("snis-data")
+
+```
+
+# 2. Download Dataset
+```{r}
+
+snis_all <- readRDS("snis_br_add.RDS")
+
+```
+
+
+# 2.1. Connect to RAIS database
+```{r}
+
+# Para carregar o dado direto no R
+query <- "br_mdr_snis.municipio_agua_esgoto"
+snis_municipio_data <- basedosdados::bdplyr(query)
+
+# Check data structure
+dplyr::glimpse(snis_municipio_data)
+
+```
+
+## 2.2. Extract data from "Serviços de Água e Esgoto nos Municípios"
+```{r}
+
+# Read the expanded query into a dataframe
+# snis_all <- basedosdados::read_sql(query = "SELECT
+#     dados.ano as ano,
+#     dados.sigla_uf AS sigla_uf,
+#     diretorio_sigla_uf.nome AS sigla_uf_nome,
+#     dados.populacao_atendida_agua as populacao_atendida_agua,
+#     dados.populacao_atentida_esgoto as populacao_atentida_esgoto,
+#     dados.populacao_urbana as populacao_urbana,
+#     dados.populacao_urbana_residente_agua as populacao_urbana_residente_agua,
+#     dados.populacao_urbana_atendida_agua as populacao_urbana_atendida_agua,
+#     dados.populacao_urbana_residente_esgoto as populacao_urbana_residente_esgoto,
+#     dados.populacao_urbana_atendida_esgoto as populacao_urbana_atendida_esgoto,
+#     dados.volume_esgoto_coletado as volume_esgoto_coletado,
+#     dados.volume_esgoto_tratado as volume_esgoto_tratado,
+#     dados.volume_esgoto_faturado as volume_esgoto_faturado,
+#     dados.indice_perda_faturamento as indice_perda_faturamento,
+#     dados.indice_perda_distribuicao_agua as indice_perda_distribuicao_agua
+# FROM `basedosdados.br_mdr_snis.municipio_agua_esgoto` AS dados
+# LEFT JOIN (SELECT DISTINCT sigla,nome  FROM `basedosdados.br_bd_diretorios_brasil.uf`) AS diretorio_sigla_uf
+#     ON dados.sigla_uf = diretorio_sigla_uf.sigla
+# ")
+
+#Read the expanded query into a dataframe
+snis_all_add <- basedosdados::read_sql(query = "SELECT
+    dados.ano as ano,
+    dados.sigla_uf AS sigla_uf,
+    diretorio_sigla_uf.nome AS sigla_uf_nome,
+    dados.populacao_atendida_agua as populacao_atendida_agua,
+    dados.populacao_atentida_esgoto as populacao_atentida_esgoto,
+    dados.populacao_urbana as populacao_urbana,
+    dados.populacao_urbana_residente_agua as populacao_urbana_residente_agua,
+    dados.populacao_urbana_atendida_agua as populacao_urbana_atendida_agua,
+    dados.populacao_urbana_residente_esgoto as populacao_urbana_residente_esgoto,
+    dados.populacao_urbana_atendida_esgoto as populacao_urbana_atendida_esgoto,
+    dados.volume_esgoto_coletado as volume_esgoto_coletado,
+    dados.volume_esgoto_tratado as volume_esgoto_tratado,
+    dados.volume_esgoto_faturado as volume_esgoto_faturado,
+    dados.indice_perda_faturamento as indice_perda_faturamento,
+    dados.indice_coleta_esgoto as indice_coleta_esgoto,
+    dados.indice_tratamento_esgoto as indice_tratamento_esgoto,
+    dados.indice_atendimento_urbano_agua as indice_atendimento_urbano_agua,
+    dados.indice_atendimento_esgoto_esgoto as indice_atendimento_esgoto_esgoto,
+    dados.indice_perda_distribuicao_agua as indice_perda_distribuicao_agua,
+    dados.indice_atendimento_total_agua as indice_atendimento_total_agua
+FROM `basedosdados.br_mdr_snis.municipio_agua_esgoto` AS dados
+LEFT JOIN (SELECT DISTINCT sigla,nome  FROM `basedosdados.br_bd_diretorios_brasil.uf`) AS diretorio_sigla_uf
+    ON dados.sigla_uf = diretorio_sigla_uf.sigla
+")
+
+#Save database
+#saveRDS(snis_all_add,"snis_br_add.RDS")
+
+```
+
+
+# 3. Data Analysis - PI
+```{r}
+
+# Select only PI
+snis_pi <- subset(snis_all, sigla_uf == "PI")
+
+# Select some columns 
+snis_pi <- snis_pi %>% select(1:2, 4:20)
+
+# Summarise
+snis_pi_summary <- snis_pi %>%
+  group_by(ano, sigla_uf) %>%
+  summarise(
+    # Summing the specified variables
+    populacao_atendida_agua = sum(populacao_atendida_agua, na.rm = TRUE),
+    populacao_atentida_esgoto = sum(populacao_atentida_esgoto, na.rm = TRUE),
+    populacao_urbana = sum(populacao_urbana, na.rm = TRUE),
+    populacao_urbana_residente_agua = sum(populacao_urbana_residente_agua, na.rm = TRUE),
+    populacao_urbana_atendida_agua = sum(populacao_urbana_atendida_agua, na.rm = TRUE),
+    populacao_urbana_residente_esgoto = sum(populacao_urbana_residente_esgoto, na.rm = TRUE),
+    populacao_urbana_atendida_esgoto = sum(populacao_urbana_atendida_esgoto, na.rm = TRUE),
+    volume_esgoto_coletado = sum(volume_esgoto_coletado, na.rm = TRUE),
+    volume_esgoto_tratado = sum(volume_esgoto_tratado, na.rm = TRUE),
+    volume_esgoto_faturado = sum(volume_esgoto_faturado, na.rm = TRUE),
+    
+    # Averaging the specified variables
+    indice_perda_faturamento = mean(indice_perda_faturamento, na.rm = TRUE),
+    indice_coleta_esgoto = mean(indice_coleta_esgoto, na.rm = TRUE),
+    indice_tratamento_esgoto = mean(indice_tratamento_esgoto, na.rm = TRUE),
+    indice_atendimento_urbano_agua = mean(indice_atendimento_urbano_agua, na.rm = TRUE),
+    indice_atendimento_esgoto_esgoto = mean(indice_atendimento_esgoto_esgoto, na.rm = TRUE),
+    indice_atendimento_total_agua = mean(indice_atendimento_total_agua, na.rm = TRUE),
+    indice_perda_distribuicao_agua = mean(indice_perda_distribuicao_agua, na.rm = TRUE)
+  )
+
+
+```
+
+
+# 4.Plots
+# Total number of TOTAL population with water and saniation services in PI
+```{r}
+
+# Reshape the data to long format for ggplot
+snis_pi_long <- snis_pi_summary %>%
+  pivot_longer(cols = c(populacao_atendida_agua, populacao_atentida_esgoto), 
+               names_to = "variable", 
+               values_to = "value")
+
+# Create the line graph
+ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +  # Create the lines
+  geom_point(size = 2) + # Optionally add points for clarity
+  labs(
+    title = "Population Attended by Water and Sewage Services",
+    x = "Year (Ano)",
+    y = "Population Attended",
+    color = "Service Type"
+  ) +
+  scale_x_continuous(
+    breaks = seq(2005, 2022, by = 3),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(2005, 2022)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",  # Position the legend at the top
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+```
+
+
+# Total number of URBAN population with water and saniation services in PI
+```{r}
+
+# Reshape the data to long format for ggplot
+snis_pi_long <- snis_pi_summary %>%
+  pivot_longer(cols = c(populacao_urbana_atendida_agua, populacao_urbana_atendida_esgoto), 
+               names_to = "variable", 
+               values_to = "value")
+
+# Create the line graph
+ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +  # Create the lines
+  geom_point(size = 2) + # Optionally add points for clarity
+  labs(
+    title = "Population Attended by Water and Sewage Services",
+    x = "Year (Ano)",
+    y = "Population Attended",
+    color = "Service Type"
+  ) +
+  scale_x_continuous(
+    breaks = seq(2005, 2022, by = 3),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(2005, 2022)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",  # Position the legend at the top
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+```
+
+# Indice de coleta de esgoto e atendimento agua   
+```{r}
+
+# Reshape the data to long format for ggplot
+snis_pi_long <- snis_pi_summary %>%
+  pivot_longer(cols = c(indice_coleta_esgoto, indice_atendimento_total_agua), 
+               names_to = "variable", 
+               values_to = "value")
+
+# Create the line graph
+ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +  # Create the lines
+  geom_point(size = 2) + # Optionally add points for clarity
+  labs(
+    title = "Population Attended by Water and Sewage Services",
+    x = "Year (Ano)",
+    y = "Population Attended",
+    color = "Service Type"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 100, by = 10),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(0, 100)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  scale_x_continuous(
+    breaks = seq(2005, 2022, by = 3),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(2005, 2022)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",  # Position the legend at the top
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+```
+
+
+
+# Indice de tratamento de esgoto  
+```{r}
+
+# Reshape the data to long format for ggplot
+snis_pi_long <- snis_pi_summary %>%
+  pivot_longer(cols = c(indice_tratamento_esgoto), 
+               names_to = "variable", 
+               values_to = "value")
+
+# Create the line graph
+ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +  # Create the lines
+  geom_point(size = 2) + # Optionally add points for clarity
+  labs(
+    title = "Population Attended by Water and Sewage Services",
+    x = "Year (Ano)",
+    y = "Population Attended",
+    color = "Service Type"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 100, by = 10),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(0, 100)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  scale_x_continuous(
+    breaks = seq(2005, 2022, by = 3),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(2005, 2022)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",  # Position the legend at the top
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+```
+
+
+# Perda distribuicao 
+```{r}
+
+# Reshape the data to long format for ggplot
+snis_pi_long <- snis_pi_summary %>%
+  pivot_longer(cols = c(indice_perda_distribuicao_agua), 
+               names_to = "variable", 
+               values_to = "value")
+
+# Create the line graph
+ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
+  geom_line(size = 1) +  # Create the lines
+  geom_point(size = 2) + # Optionally add points for clarity
+  labs(
+    title = "Population Attended by Water and Sewage Services",
+    x = "Year (Ano)",
+    y = "Population Attended",
+    color = "Service Type"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 100, by = 10),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(0, 100)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  scale_x_continuous(
+    breaks = seq(2005, 2022, by = 3),  # Set x-axis breaks from 2005 to 2023 with 3-year intervals
+    limits = c(2005, 2022)             # Ensure the axis spans from 2005 to 2023
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",  # Position the legend at the top
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+```
+
+
+
