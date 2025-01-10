@@ -139,7 +139,11 @@ extract_info <- function(pdf_text, file_name) {
   water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,1})")
   
   # Extract the 7 words following "FINALIDADE(S)"
-  use_match <- str_extract(text_clean, "(CONSUMO|FINALIDADE(S))\\s*([\\w]+(?:\\s+[\\w]+){0,6})")
+  use_match <- str_extract(text_clean, "FINALIDADE(S)?\\s*((\\S+\\s*){1,6})")
+  
+  # Remove unwanted words
+  use_match <- gsub("\\b(FINALIDADE\\(S\\)|Assinado|eletronicamente|por)\\b", "", use_match)
+  use_match <- trimws(use_match)  # Trim leading/trailing spaces after removal
   
   # Extract the values after "Janeiro", which could be numbers like "5,00", "8,0", etc.
   amount_match <- str_extract(text_clean, "Janeiro\\s*([\\d]+[,\\.]?\\d{0,2}(?:\\s+[\\d]+[,\\.]?\\d{0,2})*)")
@@ -148,6 +152,7 @@ extract_info <- function(pdf_text, file_name) {
   validade_match <- gsub("VALIDADE:\\s*", "", validade_match)
   empreendimento_match <- gsub("EMPREENDIMENTO\\s*", "", empreendimento_match)
   empreendimento_match <- gsub("Municipio\\s*", "", empreendimento_match)
+  #use_match <- gsub("FINALIDADE(S)?\\s*", "", use_match)
   city_match <- gsub("Coordenadas Geograficas:\\s*", "", city_match)
   amount_match <- gsub("Janeiro\\s*", "", amount_match)
   
@@ -211,13 +216,31 @@ columns_to_replace <- c("vazao", "tempo", "periodo", "volume")
 extracted_df[columns_to_replace] <- lapply(extracted_df[columns_to_replace], function(x) gsub(",", ".", x))
 
 
+# Create the new 'uso_detalhe' column based on 'tipo' column values
+extracted_df <- extracted_df %>%
+  mutate(uso_detalhe = case_when(
+    tipo == "ACSPROOU" ~ "DESPACHO CONCLUSIVO ARQUIVAMENTO, CANCELAMENTO OU SUSPENSÃO DE PROCESSO DE AUTORIZAÇÃO OU OUTORGA DE USO DA ÁGUA",
+    tipo == "AUTPOOP" ~ "AUTORIZAÇÃO PARA PERFURAÇÃO DE POÇO TUBULAR E OUTORGA PREVENTIVA",
+    tipo == "AUTPOOU" ~ "REGULARIZAÇÃO DE POÇO TUBULAR",
+    tipo == "PI-AODU" ~ "AUTORIZAÇÃO E OUTORGA DE DIREITO DE USO",
+    tipo == "PI-CPA" ~ "DESPACHO CONCLUSIVO - CONSULTA PRÉVIA - USO ÁGUA",
+    tipo == "PI-ODRH" ~ "OUTORGA DE DIREITO DE USO",
+    tipo == "PI-OP" ~ "OUTORGA PREVENTIVA",
+    tipo == "PI-RAODU" ~ "RENOVAÇÃO DE AUTORIZAÇÃO E DE OUTORGA DE DIREITO DE USO",
+    tipo == "PI-RODRH" ~ "RENOVAÇÃO DE OUTORGA DE DIREITO DE USO",
+    tipo == "PI-ROP" ~ "RENOVAÇÃO DE OUTORGA PREVENTIVA",
+    TRUE ~ NA_character_  # Default case, in case 'tipo' is not recognized
+  ))
+
 ```
 
 # Save file
 ```{r}
 
-# Write the data frame to a CSV file
-write.csv(extracted_df, file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi.csv", row.names = FALSE)
+write.csv(extracted_df, 
+          file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi.csv", 
+          row.names = FALSE, 
+          fileEncoding = "latin1")
 
 # Confirm that the data has been written
 #cat("Data has been written to", output_csv)
