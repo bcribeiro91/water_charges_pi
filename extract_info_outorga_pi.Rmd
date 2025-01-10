@@ -1,0 +1,203 @@
+---
+title: "Code extract water charges authorization files"
+author: "Beatriz Couto Ribeiro"
+date: "2025-01-07"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Load Packages
+```{r setup, include=FALSE}
+
+rm(list=ls())
+
+
+if (!require("pacman")) install.packages("pacman") #pacman will not accept a character vector so the same packages are repeated
+
+pacman::p_load(tidyverse, #packages for data science
+               plm, #estimation of linear panel models
+               ggplot2,  #creating graphics
+               devtools, #web developer tools 
+               rmarkdown, #reproducibility
+               tidyr,  #changing the shape and hierarchy of a data set
+               dplyr, #grammar of data manipulation
+               Synth, #importing and exporting
+               SCtools, #extensions for Synthetic Controls Analysis
+               panelView, #visualize data panels
+               httr, # call url
+               jsonlite, # use API
+               ggrepel, #labels with ggplot
+               ggthemes, #different graph themes for ggplot
+               ggpubr, #put figures together
+               rvest,
+               htmltools,
+               readtext,
+               readr,
+               pdftools,
+               stringr,
+               data.table, 
+               tabulapdf,
+               stringdist,
+               openxlsx,
+               readxl,
+               tesseract,
+               tm, #text mining package
+               stringi, #remove accents from foreigner languages
+               magick,
+               rJava) # Fast aggregation of large data
+
+# Youtube Video to Change Java's version and install the package: https://www.youtube.com/watch?v=nlsWjezvsg8&t=428s
+# library(tabulizer)
+# 
+# remotes::install_github(c("ropensci/tabulizerjars", "ropensci/tabulizer"), INSTALL_opts = "--no-multiarch")
+# 
+# remotes::install_github(c("ropensci/tabulapdf"))
+
+#install_version("tm", version = "0.7-15", repos = "http://cran.us.r-project.org")
+
+
+```
+
+
+# Set Folder 
+```{r}
+
+# Define the folder containing the PDF files
+pdf_folder <- "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/water_charges_pi_data"
+
+```
+
+
+```{r}
+
+# List all PDF files (using a case-insensitive pattern)
+files <- list.files(pdf_folder, pattern = "\\.pdf$", ignore.case = TRUE)
+
+# Create the full paths for the PDF files
+full_paths <- file.path(pdf_folder, files)
+
+# Read the text from each PDF
+data <- lapply(full_paths, pdf_text)
+
+# length of each vector corresponds to the number of pages in the PDF file
+lapply(data, length) 
+
+# Inspect the result
+print(data)
+
+```
+
+
+```{r}
+
+# List all PDF files (using a case-insensitive pattern)
+files <- list.files(pdf_folder, pattern = "\\.pdf$", ignore.case = TRUE)
+
+# List all PDF files (using a case-insensitive pattern)
+files <- list.files(pdf_folder, pattern = "\\.pdf$", ignore.case = TRUE)
+
+# Create the full paths for the PDF files
+full_paths <- file.path(pdf_folder, files)
+
+# Read the text from each PDF
+pdf_texts <- lapply(full_paths, pdf_text)
+
+# Function to clean and extract the required information from the PDF text
+extract_info <- function(pdf_text) {
+  # Concatenate all the pages into a single string
+  text <- paste(pdf_text, collapse = " ")
+  
+  # Clean the text by removing unwanted characters like "\n" and extra spaces
+  text_clean <- gsub("\n", " ", text)  # Replace newlines with a space
+  text_clean <- gsub("\\s+", " ", text_clean)  # Replace multiple spaces with a single space
+  text_clean <- trimws(text_clean)  # Trim leading and trailing spaces
+  
+  # Remove accents from foreign characters
+  text_clean <- stri_trans_general(text_clean, "Latin-ASCII")  # Remove accents using stringi
+  
+  # Check if cleaning is working, print part of cleaned text
+  print(substr(text_clean, 1, 1000))  # Uncomment to inspect cleaned text (first 200 characters)
+  
+  # Extract the characters following "AUTPOOP." (12 characters in the format XXXXX-XX/YYYY)
+  autpoop_match <- str_extract(text_clean, "AUTPOOP\\.\\s*(\\d{5}-\\d{1}/\\d{4})")
+  
+  # Extract the date following "VALIDADE:" (next 10 characters in the format DD/MM/YYYY)
+  validade_match <- str_extract(text_clean, "VALIDADE:\\s*(\\d{2}/\\d{2}/\\d{4})")
+  
+  # Extract the 7 words following "CAPTAÇÃO"
+  categoria_match <- str_extract(text_clean, "CAPTACAO\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,6})")
+  
+  # Extract the 7 words following "EMPREENDIMENTO"
+  empreendimento_match <- str_extract(text_clean, "EMPREENDIMENTO\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,5})")
+  
+  # Extract the 7 words following "cidade"
+  city_match <- str_extract(text_clean, "Coordenadas Geograficas:\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,3})")
+  
+  # Extract the 7 words following "fonte"
+  water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,1})")
+  
+  # Extract the 7 words following "FINALIDADE(S)"
+  use_match <- str_extract(text_clean, "CONSUMO\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,6})")
+  
+  # Extract the values after "Janeiro", which could be numbers like "5,00", "8,0", etc.
+  amount_match <- str_extract(text_clean, "Janeiro\\s*([\\d]+[,\\.]?\\d{0,2}(?:\\s+[\\d]+[,\\.]?\\d{0,2})*)")
+  
+  # Remove unwanted words from the extracted values
+  validade_match <- gsub("VALIDADE:\\s*", "", validade_match)
+  empreendimento_match <- gsub("EMPREENDIMENTO\\s*", "", empreendimento_match)
+  city_match <- gsub("Coordenadas Geograficas:\\s*", "", city_match)
+  amount_match <- gsub("Janeiro\\s*", "", amount_match)
+  
+  # Split the "quantidade" into four parts (vazao, tempo, periodo, volume)
+  quantity_split <- str_split(amount_match, "\\s+")[[1]]
+  vazao <- ifelse(length(quantity_split) >= 1, quantity_split[1], NA)
+  tempo <- ifelse(length(quantity_split) >= 2, quantity_split[2], NA)
+  periodo <- ifelse(length(quantity_split) >= 3, quantity_split[3], NA)
+  volume <- ifelse(length(quantity_split) >= 4, quantity_split[4], NA)
+  
+  # Return a list of the extracted values
+  return(list(
+    autpoop = autpoop_match,
+    validade = validade_match,
+    categoria = categoria_match,
+    empreendimento = empreendimento_match,
+    cidade = city_match,
+    fonte = water_source_match,
+    uso = use_match, 
+    vazao = vazao,
+    tempo = tempo,
+    periodo = periodo,
+    volume = volume
+  ))
+}
+
+# Apply the function to each PDF text
+extracted_info <- lapply(pdf_texts, extract_info)
+
+# View the extracted information
+extracted_info
+
+```
+
+
+# Save File
+```{r}
+
+# Convert the list of extracted information into a data frame
+extracted_df <- do.call(rbind, lapply(extracted_info, function(x) as.data.frame(t(unlist(x)), stringsAsFactors = FALSE)))
+
+# Name the columns of the data frame
+colnames(extracted_df) <- c("processo", "validade", "categoria", "empreendimento", "cidade", "fonte", "uso", "vazao", "tempo", "periodo", "volume")
+
+
+# Write the data frame to a CSV file
+write.csv(extracted_df, file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi.csv", row.names = FALSE)
+
+# Confirm that the data has been written
+#cat("Data has been written to", output_csv)
+
+
+```
+
