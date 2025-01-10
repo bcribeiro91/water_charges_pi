@@ -65,7 +65,7 @@ pacman::p_load(tidyverse, #packages for data science
 ```{r}
 
 # Define the folder containing the PDF files
-pdf_folder <- "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/water_charges_pi_data"
+pdf_folder <- "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/water_charges_pi_data_04-01-2025"
 
 ```
 
@@ -105,7 +105,7 @@ full_paths <- file.path(pdf_folder, files)
 pdf_texts <- lapply(full_paths, pdf_text)
 
 # Function to clean and extract the required information from the PDF text
-extract_info <- function(pdf_text) {
+extract_info <- function(pdf_text, file_name) {
   # Concatenate all the pages into a single string
   text <- paste(pdf_text, collapse = " ")
   
@@ -118,10 +118,10 @@ extract_info <- function(pdf_text) {
   text_clean <- stri_trans_general(text_clean, "Latin-ASCII")  # Remove accents using stringi
   
   # Check if cleaning is working, print part of cleaned text
-  print(substr(text_clean, 1, 1000))  # Uncomment to inspect cleaned text (first 200 characters)
+  #print(substr(text_clean, 1, 1000))  # Uncomment to inspect cleaned text (first 200 characters)
   
   # Extract the characters following "AUTPOOP." (12 characters in the format XXXXX-XX/YYYY)
-  autpoop_match <- str_extract(text_clean, "AUTPOOP\\.\\s*(\\d{5}-\\d{1}/\\d{4})")
+  autpoop_match <- str_extract(text_clean, "(AUTPOOP\\.\\s*|ACSPROOU\\.\\s*|AUTPOOU\\.\\s*|PI-CPA\\.\\s*|PI-RAODU\\.\\s*|PI-ODRH\\.\\s*|PI-AODU\\.\\s*|PI-AODU\\.\\s*|PI-OP\\.\\s*|PI-RODRH\\.\\s*|PI-ROP\\.\\s*)(\\d{5}-\\d{1}/\\d{4})")
   
   # Extract the date following "VALIDADE:" (next 10 characters in the format DD/MM/YYYY)
   validade_match <- str_extract(text_clean, "VALIDADE:\\s*(\\d{2}/\\d{2}/\\d{4})")
@@ -139,7 +139,7 @@ extract_info <- function(pdf_text) {
   water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,1})")
   
   # Extract the 7 words following "FINALIDADE(S)"
-  use_match <- str_extract(text_clean, "CONSUMO\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,6})")
+  use_match <- str_extract(text_clean, "(CONSUMO|FINALIDADE(S))\\s*([\\w]+(?:\\s+[\\w]+){0,6})")
   
   # Extract the values after "Janeiro", which could be numbers like "5,00", "8,0", etc.
   amount_match <- str_extract(text_clean, "Janeiro\\s*([\\d]+[,\\.]?\\d{0,2}(?:\\s+[\\d]+[,\\.]?\\d{0,2})*)")
@@ -147,6 +147,7 @@ extract_info <- function(pdf_text) {
   # Remove unwanted words from the extracted values
   validade_match <- gsub("VALIDADE:\\s*", "", validade_match)
   empreendimento_match <- gsub("EMPREENDIMENTO\\s*", "", empreendimento_match)
+  empreendimento_match <- gsub("Municipio\\s*", "", empreendimento_match)
   city_match <- gsub("Coordenadas Geograficas:\\s*", "", city_match)
   amount_match <- gsub("Janeiro\\s*", "", amount_match)
   
@@ -157,8 +158,9 @@ extract_info <- function(pdf_text) {
   periodo <- ifelse(length(quantity_split) >= 3, quantity_split[3], NA)
   volume <- ifelse(length(quantity_split) >= 4, quantity_split[4], NA)
   
-  # Return a list of the extracted values
+  # Return a list of the extracted values, including the file name as "ID"
   return(list(
+    ID = file_name,
     autpoop = autpoop_match,
     validade = validade_match,
     categoria = categoria_match,
@@ -173,8 +175,8 @@ extract_info <- function(pdf_text) {
   ))
 }
 
-# Apply the function to each PDF text
-extracted_info <- lapply(pdf_texts, extract_info)
+# Apply the function to each PDF text and extract the information
+extracted_info <- mapply(extract_info, pdf_texts, files, SIMPLIFY = FALSE)
 
 # View the extracted information
 extracted_info
@@ -189,8 +191,30 @@ extracted_info
 extracted_df <- do.call(rbind, lapply(extracted_info, function(x) as.data.frame(t(unlist(x)), stringsAsFactors = FALSE)))
 
 # Name the columns of the data frame
-colnames(extracted_df) <- c("processo", "validade", "categoria", "empreendimento", "cidade", "fonte", "uso", "vazao", "tempo", "periodo", "volume")
+colnames(extracted_df) <- c("ID", "processo", "validade", "categoria", "empreendimento", "cidade", "fonte", "uso", "vazao", "tempo", "periodo", "volume")
 
+
+```
+
+
+# Cleanning database
+```{r}
+
+# Create the 'tipo' column by extracting the part before the dot in 'processo'
+extracted_df$tipo <- sub("\\..*", "", extracted_df$processo)
+
+# Create the 'ano' column by extracting the first four digits from 'processo'
+extracted_df$ano <- substr(extracted_df$processo, nchar(extracted_df$processo) - 3, nchar(extracted_df$processo))
+
+# Replace commas with dots in the specified columns
+columns_to_replace <- c("vazao", "tempo", "periodo", "volume")
+extracted_df[columns_to_replace] <- lapply(extracted_df[columns_to_replace], function(x) gsub(",", ".", x))
+
+
+```
+
+# Save file
+```{r}
 
 # Write the data frame to a CSV file
 write.csv(extracted_df, file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi.csv", row.names = FALSE)
