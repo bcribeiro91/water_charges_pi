@@ -46,7 +46,7 @@ set_billing_id("snis-data")
 # 2. Download Dataset
 ```{r}
 
-snis_all <- readRDS("snis_br_add.RDS")
+#snis_all <- readRDS("snis_br_add.RDS")
 
 ```
 
@@ -55,15 +55,15 @@ snis_all <- readRDS("snis_br_add.RDS")
 ```{r}
 
 # Para carregar o dado direto no R
-query <- "br_mdr_snis.municipio_agua_esgoto"
-snis_municipio_data <- basedosdados::bdplyr(query)
+query <- "uf"
+uf_pop_data <- basedosdados::bdplyr(query)
 
 # Check data structure
-dplyr::glimpse(snis_municipio_data)
+#dplyr::glimpse(snis_municipio_data)
 
 ```
 
-## 2.2. Extract data from "Serviços de Água e Esgoto nos Municípios"
+## 2.2. Extract data from "Serviços de Água e Esgoto nos Municípios": https://basedosdados.org/dataset/2a543ad8-3cdb-4047-9498-efe7fb8ed697?table=df7cf198-4889-4baf-bb77-4e0e28eb90ca
 ```{r}
 
 # Read the expanded query into a dataframe
@@ -121,11 +121,34 @@ LEFT JOIN (SELECT DISTINCT sigla,nome  FROM `basedosdados.br_bd_diretorios_brasi
 ```
 
 
+## 2.3. Extract data from "População Brasileira": https://basedosdados.org/dataset/d30222ad-7a5c-4778-a1ec-f0785371d1ca?table=b99f0017-e587-477e-8cfb-05fb5d1005b8
+```{r}
+
+# Para carregar o dado direto no R
+# pop_data <- basedosdados::read_sql(query = "SELECT
+#     dados.sigla_uf AS sigla_uf,
+#     diretorio_sigla_uf.nome AS sigla_uf_nome,
+#     dados.ano as ano,
+#     dados.populacao as populacao
+# FROM `basedosdados.br_ibge_populacao.uf` AS dados
+# LEFT JOIN (SELECT DISTINCT sigla,nome  FROM `basedosdados.br_bd_diretorios_brasil.uf`) AS diretorio_sigla_uf
+#     ON dados.sigla_uf = diretorio_sigla_uf.sigla
+# ")
+
+#Save database
+#saveRDS(pop_data,"pop_data.RDS")
+
+
+```
+
+
 # 3. Data Analysis - PI
 ```{r}
 
 # Select only PI
 snis_pi <- subset(snis_all, sigla_uf == "PI")
+
+pop_data_pi <- subset(pop_data, sigla_uf == "PI")
 
 # Select some columns 
 snis_pi <- snis_pi %>% select(1:2, 4:20)
@@ -156,6 +179,11 @@ snis_pi_summary <- snis_pi %>%
     indice_perda_distribuicao_agua = mean(indice_perda_distribuicao_agua, na.rm = TRUE)
   )
 
+
+snis_pi_pop_summary <- snis_pi_summary %>% left_join(pop_data_pi %>% select(sigla_uf, ano, populacao), by = c("sigla_uf", "ano"))
+
+
+write_csv(snis_pi_pop_summary,"snis_pi.csv")
 
 ```
 
@@ -239,6 +267,7 @@ snis_pi_long <- snis_pi_summary %>%
 ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
   geom_line(size = 1) +  # Create the lines
   geom_point(size = 2) + # Optionally add points for clarity
+  geom_text(aes(label = paste0(round(value, 1), "%")), vjust = -0.5, size = 3) +  # Add values as percentage on top of the points
   labs(
     title = "Population Attended by Water and Sewage Services",
     x = "Year (Ano)",
@@ -276,6 +305,7 @@ snis_pi_long <- snis_pi_summary %>%
 ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
   geom_line(size = 1) +  # Create the lines
   geom_point(size = 2) + # Optionally add points for clarity
+    geom_text(aes(label = paste0(round(value, 1), "%")), vjust = -0.5, size = 3) +  # Add values as percentage on top of the points
   labs(
     title = "Population Attended by Water and Sewage Services",
     x = "Year (Ano)",
@@ -312,6 +342,7 @@ snis_pi_long <- snis_pi_summary %>%
 ggplot(snis_pi_long, aes(x = ano, y = value, color = variable, group = variable)) +
   geom_line(size = 1) +  # Create the lines
   geom_point(size = 2) + # Optionally add points for clarity
+      geom_text(aes(label = paste0(round(value, 1), "%")), vjust = -0.5, size = 3) +  # Add values as percentage on top of the points
   labs(
     title = "Population Attended by Water and Sewage Services",
     x = "Year (Ano)",
