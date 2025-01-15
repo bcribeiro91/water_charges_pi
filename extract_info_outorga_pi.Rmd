@@ -137,7 +137,7 @@ extract_info <- function(pdf_text, file_name) {
   city_match <- str_extract(text_clean, "Coordenadas Geograficas:\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,3})")
   
   # Extract the 7 words following "fonte"
-water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,5})")
+  water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z]+){0,5})")
   
   # Extract the 7 words following "FINALIDADE(S)"
   use_match <- str_extract(text_clean, "FINALIDADE(S)?\\s*((\\S+\\s*){1,6})")
@@ -147,7 +147,7 @@ water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z
   use_match <- trimws(use_match)  # Trim leading/trailing spaces after removal
   
   # Extract the values after "Janeiro", which could be numbers like "5,00", "8,0", etc.
-  amount_match <- str_extract(text_clean, "Janeiro\\s*([\\d]+[,\\.]?\\d{0,2}(?:\\s+[\\d]+[,\\.]?\\d{0,2})*)")
+  amount_match <- str_extract(text_clean, "Volume Anual \\(m³\\):\\s*([\\d,.]+)")
   
   # Remove unwanted words from the extracted values
   validade_match <- gsub("VALIDADE:\\s*", "", validade_match)
@@ -155,14 +155,7 @@ water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z
   empreendimento_match <- gsub("Municipio\\s*", "", empreendimento_match)
   #use_match <- gsub("FINALIDADE(S)?\\s*", "", use_match)
   city_match <- gsub("Coordenadas Geograficas:\\s*", "", city_match)
-  amount_match <- gsub("Janeiro\\s*", "", amount_match)
-  
-  # Split the "quantidade" into four parts (vazao, tempo, periodo, volume)
-  quantity_split <- str_split(amount_match, "\\s+")[[1]]
-  vazao <- ifelse(length(quantity_split) >= 1, quantity_split[1], NA)
-  tempo <- ifelse(length(quantity_split) >= 2, quantity_split[2], NA)
-  periodo <- ifelse(length(quantity_split) >= 3, quantity_split[3], NA)
-  volume <- ifelse(length(quantity_split) >= 4, quantity_split[4], NA)
+  amount_match <- gsub("Volume Anual \\(m³\\):\\s*", "", amount_match)
   
   # Return a list of the extracted values, including the file name as "ID"
   return(list(
@@ -174,10 +167,7 @@ water_source_match <- str_extract(text_clean, "BACIA\\s*([a-zA-Z]+(?:\\s+[a-zA-Z
     cidade = city_match,
     fonte = water_source_match,
     uso = use_match, 
-    vazao = vazao,
-    tempo = tempo,
-    periodo = periodo,
-    volume = volume
+    volume = amount_match
   ))
 }
 
@@ -197,7 +187,7 @@ extracted_info
 extracted_df <- do.call(rbind, lapply(extracted_info, function(x) as.data.frame(t(unlist(x)), stringsAsFactors = FALSE)))
 
 # Name the columns of the data frame
-colnames(extracted_df) <- c("ID", "processo", "validade", "categoria", "empreendimento", "cidade", "fonte", "uso", "vazao", "tempo", "periodo", "volume")
+colnames(extracted_df) <- c("ID", "processo", "validade", "categoria", "empreendimento", "cidade", "fonte", "uso", "volume")
 
 
 ```
@@ -213,7 +203,7 @@ extracted_df$tipo <- sub("\\..*", "", extracted_df$processo)
 extracted_df$ano <- substr(extracted_df$processo, nchar(extracted_df$processo) - 3, nchar(extracted_df$processo))
 
 # Replace commas with dots in the specified columns
-columns_to_replace <- c("vazao", "tempo", "periodo", "volume")
+columns_to_replace <- c("volume")
 extracted_df[columns_to_replace] <- lapply(extracted_df[columns_to_replace], function(x) gsub(",", ".", x))
 
 
@@ -470,7 +460,7 @@ fonte == "BACIA DO CANINDE Cabecas"  ~ "BACIA DO CANINDE",
 ```{r}
 
 write.csv(extracted_df, 
-          file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi_raw_10-01-2024.csv", 
+          file = "C:/Users/wb618493/OneDrive - WBG/Documents/Piaui - DPL/Cobranca de Agua/outorgas_pi_raw_15-01-2024.csv", 
           row.names = FALSE, 
           fileEncoding = "latin1")
 
